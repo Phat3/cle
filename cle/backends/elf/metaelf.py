@@ -28,7 +28,7 @@ class MetaELF(Backend):
         realaddr = addr
         if thumb: realaddr -= 1
         dat = ''.join(self.memory.read_bytes(AT.from_lva(realaddr, self).to_rva(), 40))
-        return pyvex.IRSB(dat, addr, self.arch, bytes_offset=1 if thumb else 0, opt_level=1)
+        return pyvex.lift(self.arch, addr, dat, bytes_offset=1 if thumb else 0, opt_level=1)
 
     def _add_plt_stub(self, name, addr, sanity_check=True):
         # addr is an LVA
