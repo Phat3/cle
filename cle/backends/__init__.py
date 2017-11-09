@@ -290,7 +290,7 @@ def register_backend(name, cls):
     ALL_BACKENDS.update({name: cls})
 
 
-from .elf import ELF, ELFCore, MetaELF
+from .elf import ELF, ELFCore, MetaELF, ELFKo
 from .pe import PE
 from .idabin import IDABin
 from .blob import Blob

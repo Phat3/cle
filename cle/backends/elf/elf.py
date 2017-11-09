@@ -134,7 +134,11 @@ class ELF(MetaELF):
         identstring = stream.read(0x1000)
         stream.seek(0)
         if identstring.startswith('\x7fELF'):
-            if elftools.elf.elffile.ELFFile(stream).header['e_type'] == 'ET_CORE':
+            elf_file = elftools.elf.elffile.ELFFile(stream)
+            if (elf_file.get_section_by_name("__ksymtab") is not None) or \
+               (elf_file.get_section_by_name(".modinfo") is not None) or \
+               (elf_file.get_section_by_name(".gnu.linkonce.this_module") is not None) or \
+               elf_file.header['e_type'] == 'ET_CORE':
                 return False
             return True
         return False

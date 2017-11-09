@@ -555,7 +555,6 @@ class Loader(object):
                     break
             else:
                 options = {}
-
         # STEP 3: identify backend
         backend_spec = options.pop('backend', None)
         backend_cls = self._backend_resolver(backend_spec)
