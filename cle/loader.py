@@ -466,7 +466,6 @@ class Loader(object):
         objects = []
         dependencies = []
         cached_failures = set() # this assumes that the load path is global and immutable by the time we enter this func
-
         for main_spec in args:
             if self.find_object(main_spec, extra_objects=objects) is not None:
                 l.info("Skipping load request %s - already loaded", main_spec)
