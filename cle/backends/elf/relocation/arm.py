@@ -56,7 +56,7 @@ class R_ARM_CALL(ELFReloc):
 
         if inst & 0x00800000: A |= 0xFF000000           # Sign extend to 32-bits
         result = ((S + (A << 2)) | T) - P               # Do the initial work
-        imm24 = (result & 0x03FFFFFC) >> 2              # Sign_extend(inst[25:2])
+        imm24 = (result & 0x03FFFFFE) >> 2              # Sign_extend(inst[25:2])
 
         if T:                                           # Do Thumb relocation
             mask = 0xFF000000
