@@ -1,11 +1,8 @@
-import struct
 import logging
 from elftools.elf import elffile
 
 from .elf import ELF
 from .. import register_backend
-from ...address_translator import AT
-from ...errors import CLEError, CLECompatibilityError
 
 l = logging.getLogger('cle.elfko')
 
@@ -17,9 +14,7 @@ class ELFKo(ELF):
 
     def __init__(self, binary, **kwargs):
         super(ELFKo, self).__init__(binary, **kwargs)
-        self.symtab = None
-        self.strtab = None
-        self._apply_kernel_relocs()
+        self._register_dependency()
 
     @staticmethod
     def is_compatible(stream):
@@ -40,51 +35,52 @@ class ELFKo(ELF):
         return False
 
 
-    def _apply_kernel_relocs(self):
+    def _register_dependency(self):
         """
-        Patch unknown symbols if some other module previously loaded
-        exported the symbolwe want
-        """
-        if self._get_symtab_and_strtab():
-            self._simplify_symbols()
+        Check if the module serves as a dependency of another module
+        included in the analysis. If this is the case the module is added as
+        dependent object of the main module
 
-    def _get_symtab_and_strtab(self):
-        """
-        Check if there is a section marked as SYMTAB.
-        If so get the associated strtab also.
-        
-        :return : True if the symtab is found otherwise false
-        """
-        for sec in self.reader.iter_sections():
-            if sec.header["sh_type"] == "SHT_SYMTAB":
-                # TODO: Is it safe to assume only one symtab and related strtab?
-                #       It seems so from the kernel code.
-                self.symtab = sec
-                self.strtab = self.reader.get_section(sec.header["sh_link"])
-                return True
-        return False
+        TODO: implement this thing recursively
+              (i. e. mod_1 --- depends on ---> mod_2 --- depends on ---> mod_3
+              we need to put mod_3 as a dependency object of mod_2 and not as
+              dependency of mod_1).
 
-    def _simplify_symbols(self):
+              Probably it's gonna work also now if the order of loading is
+              given to angr before. Angr will load first the module
+              without any dependency (mod_3), then the other one that depends
+              only on mod_3 (mod_2) and so on.
         """
-        Simulate the lookup inside the kernel symbol table.
-        This table is simulated throug the extern object of angr.
-        Every time a module export a symbol a new entry is created inside the extern object.
-        Here we just query the symbol that we want to simplyfy and if it is present
-        inside the extern object we patch it with the correct address.
+        if self.loader.main_object is not None and \
+           "__ksymtab" in self.sections_map.keys():
+           # add ourself as dependency of main module
+           self.loader.main_object.deps.append(self.provides)
+           # we need to export our symbols
+           self._register_exports()
 
-        This is needed in order to preserve dependency among the modules we want to analyze
+
+    def _register_exports(self):
         """
-        for sym in self.symtab.iter_symbols():
-            if sym.entry["st_shndx"] == "SHN_COMMON":
-                l.debug("Found symbol %r with header SHN_COMMON... Nothing to do...", sym.name)
-            elif sym.entry["st_shndx"] == "SHN_ABS":
-                l.debug("Found symbol %r with header SHN_ABS pointing at %r... Nothing to do...", sym.name, sym.entry["st_value"])
-            elif sym.entry["st_shndx"] == "SHN_LIVEPATCH":
-                l.debug("Found symbol %r with header SHN_LIVEPATCH... Nothing to do...", sym.name)
-            elif sym.entry["st_shndx"] == "SHN_UNDEF":
-                l.debug("Found symbol %r with header SHN_UNDEF... Need to simplfy", sym.name)
-                # TODO: Check in extern if something is found?
-            else:
-                l.debug("Found symbol %r with real section header", sym.name)
+        Angr by default does not parse sections __ksymtab and __ksymtab_strings
+        because it does not support kernel modules (these section are present only in these modules).
+        These two sections contains all exported symbols which can be used by other
+        modules.
+
+        In order to easily support this feature we can use this simple trick: at this point
+        angr has already loaded the binary and parsed all symbols correctly (all of them have already the
+        correct rebased address), but the ones present in the __ksymtab are not marked as "exported".
+        To fx this we can just parse the __ksymtab_strings and mark as "exported" every
+        symbol related to every string found in this section.
+
+        If we don't do this we are gonna have several problems such as:
+            - Globals imported form other module will not be referenced correctly
+            - Functions imported from other modules will be substituted by the default
+              SimProcedure even if we have the correct target in memory
+        """
+        kstrtab = self.reader.get_section_by_name("__ksymtab_strings")
+        for exported_sym_name in kstrtab.data().split("\x00"):
+            if exported_sym_name:
+                self.get_symbol(exported_sym_name).is_export = True
+
 
 register_backend('elfko', ELFKo)
