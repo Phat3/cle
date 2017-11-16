@@ -509,6 +509,13 @@ class Loader(object):
         for obj in objects:
             if isinstance(obj, (MetaELF, PE)) and obj.tls_used:
                 self.tls_object.register_object(obj)
+        # All object need to be registered and mapped before
+        # register dependencies among Kmod, but we have to do
+        # it BEFORE relocation.
+        for obj in objects:
+            if isinstance(obj, ELFKo):
+                obj.register_dependency()
+        import ipdb; ipdb.set_trace()
         for obj in objects:
             self._relocate_object(obj)
         for obj in objects:
@@ -885,7 +892,7 @@ class Loader(object):
 
 from .errors import CLEError, CLEFileNotFoundError, CLECompatibilityError, CLEOperationError
 from .memory import Clemory
-from .backends import MetaELF, ELF, PE, ALL_BACKENDS, Backend
+from .backends import MetaELF, ELF, PE, ALL_BACKENDS, Backend, ELFKo
 from .backends.tls import PETLSObject, ELFTLSObject
 from .backends.externs import ExternObject, KernelObject
 from .utils import stream_or_path

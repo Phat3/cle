@@ -14,7 +14,7 @@ class ELFKo(ELF):
 
     def __init__(self, binary, **kwargs):
         super(ELFKo, self).__init__(binary, **kwargs)
-        self._register_dependency()
+        self._register_exports()
 
     @staticmethod
     def is_compatible(stream):
@@ -35,28 +35,35 @@ class ELFKo(ELF):
         return False
 
 
-    def _register_dependency(self):
+    def register_dependency(self):
         """
         Check if the module serves as a dependency of another module
         included in the analysis. If this is the case the module is added as
-        dependent object of the main module
+        dependent object.
 
-        TODO: implement this thing recursively
-              (i. e. mod_1 --- depends on ---> mod_2 --- depends on ---> mod_3
-              we need to put mod_3 as a dependency object of mod_2 and not as
-              dependency of mod_1).
+        The onnly way to understand dependencies between kernel module is to
+        know the order in which the module are loaded. Even in a real world
+        scenario if you try to load modules in a different order than the correct
+        one everything won't work (depmod takes care of this issues).
 
-              Probably it's gonna work also now if the order of loading is
-              given to angr before. Angr will load first the module
-              without any dependency (mod_3), then the other one that depends
-              only on mod_3 (mod_2) and so on.
+        It is possible to emulate this behaviour using this trick:
+            - ASSUMPTIONS:
+                - The order of the kernel module is known and the dependent Kmod
+                  are listed inside the "force_load_libs" option from the one that
+                  depends more on the others to the one that has no dependencies
+
+            - Locate the currect Kmod (self) inside the shared_object dictionary
+            - Put self as a dependency of all the Kmod listed before him in shared_object dict
+
+        This is an over-extimation (it is not always true that a module serves as dependency of
+        all the previous one) but at least is guaranteed that all the dependencies are
+        satisfieed correctly.
         """
-        if self.loader.main_object is not None and \
-           "__ksymtab" in self.sections_map.keys():
-           # add ourself as dependency of main module
-           self.loader.main_object.deps.append(self.provides)
-           # we need to export our symbols
-           self._register_exports()
+        shared_objects_list = self.loader.shared_objects.values()
+        module_name = self.binary.split("/")[-1]
+        module_order_number = self.loader.shared_objects.keys().index(module_name)
+        for i in range(0,module_order_number):
+            shared_objects_list[i].deps.append(module_name)
 
 
     def _register_exports(self):
@@ -77,10 +84,11 @@ class ELFKo(ELF):
             - Functions imported from other modules will be substituted by the default
               SimProcedure even if we have the correct target in memory
         """
-        kstrtab = self.reader.get_section_by_name("__ksymtab_strings")
-        for exported_sym_name in kstrtab.data().split("\x00"):
-            if exported_sym_name:
-                self.get_symbol(exported_sym_name).is_export = True
+        if "__ksymtab_strings" in self.sections_map.keys():
+            kstrtab = self.reader.get_section_by_name("__ksymtab_strings")
+            for exported_sym_name in kstrtab.data().split("\x00"):
+                if exported_sym_name:
+                    self.get_symbol(exported_sym_name).is_export = True
 
 
 register_backend('elfko', ELFKo)
