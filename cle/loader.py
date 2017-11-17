@@ -515,7 +515,6 @@ class Loader(object):
         for obj in objects:
             if isinstance(obj, ELFKo):
                 obj.register_dependency()
-        import ipdb; ipdb.set_trace()
         for obj in objects:
             self._relocate_object(obj)
         for obj in objects:
