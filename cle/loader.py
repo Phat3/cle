@@ -616,7 +616,6 @@ class Loader(object):
         dep_objs = [self.shared_objects[dep_name] for dep_name in obj.deps if dep_name in self.shared_objects]
         for dep_obj in dep_objs:
             self._relocate_object(dep_obj)
-
         l.info("Relocating %s", obj.binary)
         for reloc in obj.relocs:
             if not reloc.resolved:

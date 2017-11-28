@@ -40,11 +40,13 @@ class R_ARM_CALL(ELFReloc):
     Class: Static
     Type: ARM (R_ARM_CALL, R_ARM_JUMP24); Deprecated (R_ARM_PC24)
     Code: 1 (R_ARM_PC24), 28 (R_ARM_CALL), 29 (R_ARM_JUMP24)
-    Operation: ((S + A) | T) - P
+    Operation: ((S + (A << 2)) | T) - P
         - S is the address of the symbol
         - A is the addend
         - P is the target location (place being relocated)
         - T is 1 if the symbol is of type STT_FUNC and addresses a Thumb instruction
+
+    TODO: What about relocations with target offset that does not fit in 3 bytes?
     """
 
     @property

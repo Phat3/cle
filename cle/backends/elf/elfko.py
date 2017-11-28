@@ -3,6 +3,7 @@ from elftools.elf import elffile
 
 from .elf import ELF
 from .. import register_backend
+from .relocation.arm import R_ARM_CALL, R_ARM_PC24, R_ARM_JUMP24
 
 l = logging.getLogger('cle.elfko')
 
@@ -15,6 +16,7 @@ class ELFKo(ELF):
     def __init__(self, binary, **kwargs):
         super(ELFKo, self).__init__(binary, **kwargs)
         self._register_exports()
+        self._count_plt()
 
     @staticmethod
     def is_compatible(stream):
@@ -89,6 +91,16 @@ class ELFKo(ELF):
             for exported_sym_name in kstrtab.data().split("\x00"):
                 if exported_sym_name:
                     self.get_symbol(exported_sym_name).is_export = True
+
+    def _count_plt(self):
+        num_plt_entries = 0
+        for rel in self.relocs:
+            if isinstance(rel, R_ARM_CALL):
+                num_plt_entries += 1
+                # print "do stuff..."
+
+    def __register_sections(self):
+        print "overwritten..."
 
 
 register_backend('elfko', ELFKo)

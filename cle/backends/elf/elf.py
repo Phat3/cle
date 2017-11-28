@@ -624,6 +624,7 @@ class ELF(MetaELF):
         self.tls_tdata_start = seg_readelf.header.p_vaddr
 
     def __register_sections(self):
+        print "Still here..."
         new_addr = 0
         sec_list = []
 
