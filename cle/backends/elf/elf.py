@@ -80,7 +80,7 @@ class ELF(MetaELF):
         self.resolved_imports = []
 
         self.relocs = []
-        self.jmprel = {}
+        self.jmprel = OrderedDict()
 
         self._entry = self.reader.header.e_entry
         self.is_relocatable = self.reader.header.e_type == 'ET_REL'
@@ -367,43 +367,30 @@ class ELF(MetaELF):
         if self.binary is None:
             raise ValueError("Can't pickle an object loaded from a stream")
 
-        # Cache the objects before trashing them so we can continue
-        # working without re-loading the pickle
-        rdr = self.reader
-        strt = self.strtab
-        dyn = self.dynsym
-        hsh = self.hashtable
-        bs = self.binary_stream
-
-        # Trash the unpickleable
-        if type(self.binary_stream) is PatchedStream:
-            self.binary_stream.stream = None
-        else:
-            self.binary_stream = None
-
-        self.reader = None
-        self.strtab = None
-        self.dynsym = None
-        self.hashtable = None
-
         # Get a copy of our pickleable self
         out = dict(self.__dict__)
 
-        # Restore the cached items
-        self.reader = rdr
-        self.strtab = strt
-        self.dynsym = dyn
-        self.hashtable = hsh
-        self.binary_stream = bs
+        # Trash the unpickleable
+        if type(self.binary_stream) is PatchedStream:
+            out['binary_stream'].stream = None
+        else:
+            out['binary_stream'] = None
+
+        out['reader'] = None
+        out['strtab'] = None
+        out['dynsym'] = None
+        out['hashtable'] = None
 
         return out
 
     def __setstate__(self, data):
         self.__dict__.update(data)
+
         if self.binary_stream is None:
             self.binary_stream = open(self.binary, 'rb')
         else:
             self.binary_stream.stream = open(self.binary, 'rb')
+
         self.reader = elffile.ELFFile(self.binary_stream)
         if self._dynamic and 'DT_STRTAB' in self._dynamic:
             fakestrtabheader = {
@@ -552,9 +539,18 @@ class ELF(MetaELF):
                         'sh_size': jmprelsz
                     }
                     readelf_jmprelsec = elffile.RelocationSection(fakejmprelheader, 'jmprel_cle', self.memory, self.reader)
-                    self.jmprel = OrderedDict((reloc.symbol.name, reloc) for reloc in self.__register_relocs(readelf_jmprelsec) if reloc.symbol.name != '')
+                    self.__register_relocs(readelf_jmprelsec, force_jmprel=True)
 
-    def __register_relocs(self, section):
+    def __register_relocs(self, section, force_jmprel=False):
+
+        got_min = got_max = 0
+
+        if not force_jmprel:
+            got_sec = self.reader.get_section_by_name('.got')
+            if got_sec is not None:
+                got_min = got_sec.header.sh_addr
+                got_max = got_min + got_sec.header.sh_size
+
         if section.header['sh_offset'] in self.__parsed_reloc_tables:
             return
         self.__parsed_reloc_tables.add(section.header['sh_offset'])
@@ -615,6 +611,11 @@ class ELF(MetaELF):
                 if reloc is not None:
                     relocs.append(reloc)
                     self.relocs.append(reloc)
+
+        for reloc in relocs:
+            if reloc.symbol.name != '' and (force_jmprel or got_min <= reloc.linked_addr < got_max):
+                self.jmprel[reloc.symbol.name] = reloc
+
         return relocs
 
     def __register_tls(self, seg_readelf):

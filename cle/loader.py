@@ -5,6 +5,8 @@ import platform
 import logging
 from collections import OrderedDict
 
+import archinfo
+
 from .address_translator import AT
 from .utils import ALIGN_UP, key_bisect_insort_left, key_bisect_floor_key
 
@@ -307,28 +309,34 @@ class Loader(object):
         elif isinstance(obj.memory, Clemory):
             if AT.from_va(addr, obj).to_rva() in obj.memory:
                 return obj
+            return None
         else:
             raise CLEError('Unsupported memory type %s' % type(obj.memory))
 
-    def find_symbol(self, name):
+    def find_symbol(self, thing):
         """
         Search for the symbol with the given name or address.
 
-        :param name:        Either the name or address of a symbol to look up
+        :param thing:        Either the name or address of a symbol to look up
 
         :returns:           A :class:`cle.backends.Symbol` object if found, None otherwise.
         """
-        if type(name) in (int, long):
-            so = self.find_object_containing(name)
+        if type(thing) is archinfo.arch_soot.SootAddressDescriptor:
+            # Soot address
+            return thing.method.fullname
+        elif type(thing) in (int, long):
+            # address
+            so = self.find_object_containing(thing)
             if so is not None:
-                addr = AT.from_mva(name, so).to_rva()
+                addr = AT.from_mva(thing, so).to_rva()
                 if addr in so._symbols_by_addr:
                     return so._symbols_by_addr[addr]
         else:
+            # name
             for so in self.all_objects:
                 if so is self._extern_object:
                     continue
-                sym = so.get_symbol(name)
+                sym = so.get_symbol(thing)
                 if sym is None:
                     continue
 
@@ -343,7 +351,7 @@ class Loader(object):
                     return sym
 
             if self._extern_object is not None:
-                sym = self.extern_object.get_symbol(name)
+                sym = self.extern_object.get_symbol(thing)
                 if sym is not None:
                     return sym
 
@@ -427,6 +435,16 @@ class Loader(object):
         except CLEFileNotFoundError as e:
             l.warning("Dynamic load failed: %r", e)
             return None
+
+    def add_object(self, obj):
+        """
+        If you've constructed your own Backend-subclass object and want to add it directly to the loader, use this.
+        """
+        self._register_object(obj)
+        self._map_object(obj)
+        if isinstance(obj, (MetaELF, PE)) and obj.tls_used:
+            self.tls_object.register_object(obj)
+        self._relocate_object(obj)
 
     def get_loader_symbolic_constraints(self):
         """
@@ -600,9 +618,10 @@ class Loader(object):
         assert obj.min_addr < obj.max_addr
         assert obj.mapped_base >= 0
 
-        l.info("Mapping %s at %#x", obj.binary, base_addr)
-        self.memory.add_backer(base_addr, obj.memory)
-        key_bisect_insort_left(self.all_objects, obj, keyfunc=lambda o: o.min_addr)
+        if obj.has_memory:
+            l.info("Mapping %s at %#x", obj.binary, base_addr)
+            self.memory.add_backer(base_addr, obj.memory)
+            key_bisect_insort_left(self.all_objects, obj, keyfunc=lambda o: o.min_addr)
         obj._is_mapped = True
 
     def _relocate_object(self, obj):
@@ -756,21 +775,21 @@ class Loader(object):
         if not os.path.exists(dirname):
             dirname = cls._path_insensitive(dirname)
             if not dirname:
-                return
+                return None
         # at this point, the directory exists but not the file
         try:  # we are expecting dirname to be a directory, but it could be a file
             files = os.listdir(dirname)
         except OSError:
-            return
+            return None
         baselow = base.lower()
         try:
             basefinal = next(fl for fl in files if fl.lower() == baselow)
         except StopIteration:
-            return
+            return None
         if basefinal:
             return os.path.join(dirname, basefinal) + suffix
         else:
-            return
+            return None
 
     def _possible_idents(self, spec, lowercase=False):
         """
