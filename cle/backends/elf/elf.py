@@ -625,10 +625,8 @@ class ELF(MetaELF):
         self.tls_tdata_start = seg_readelf.header.p_vaddr
 
     def __register_sections(self):
-        print "Still here..."
         new_addr = 0
         sec_list = []
-
         for sec_readelf in self.reader.iter_sections():
             remap_offset = 0
             if self.is_relocatable and sec_readelf.header['sh_flags'] & 2:      # alloc flag
@@ -649,6 +647,7 @@ class ELF(MetaELF):
             self.sections.append(section)
             self.sections_map[section.name] = section
 
+
         for sec_readelf, section in sec_list:
             if isinstance(sec_readelf, elffile.SymbolTableSection):
                 self.__register_section_symbols(sec_readelf)
@@ -662,6 +661,9 @@ class ELF(MetaELF):
                         self.memory.add_backer(AT.from_lva(section.vaddr, self).to_rva(), '\0'*sec_readelf.header['sh_size'])
                     else: #elif section.type == 'SHT_PROGBITS':
                         self.memory.add_backer(AT.from_lva(section.vaddr, self).to_rva(), sec_readelf.data())
+        
+        if isinstance(self, ELFKo):
+            self._count_plt()
 
     def __register_section_symbols(self, sec_re):
         for sym_re in sec_re.iter_symbols():
@@ -689,3 +691,5 @@ class ELF(MetaELF):
         return True
 
 register_backend('elf', ELF)
+
+from .elfko import ELFKo

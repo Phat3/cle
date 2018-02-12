@@ -97,10 +97,9 @@ class ELFKo(ELF):
         for rel in self.relocs:
             if isinstance(rel, R_ARM_CALL):
                 num_plt_entries += 1
+                # if rel.symbol.name == "register_qdisc":
+                    # import ipdb; ipdb.set_trace()
                 # print "do stuff..."
-
-    def __register_sections(self):
-        print "overwritten..."
 
 
 register_backend('elfko', ELFKo)
