@@ -108,7 +108,6 @@ class ELF(MetaELF):
 
         self.__register_segments()
         self.__register_sections()
-
         # call the methods defined by MetaELF
         self._ppc64_abiv1_entry_fix()
         self._load_plt()
@@ -640,6 +639,16 @@ class ELF(MetaELF):
                 remap_offset = new_addr - sh_addr
                 new_addr += sec_readelf.header['sh_size']    # address for next section
 
+            # if isinstance(self, ELFKo) and sec_readelf.name == ".text":
+            #     import ipdb; ipdb.set_trace()
+            #     self._count_plt()
+
+            if isinstance(self, ELFKo) and  \
+                sec_readelf.header["sh_type"] == "SHT_REL" and \
+                sec_readelf.header["sh_flags"] & 0x4:
+                import ipdb; ipdb.set_trace()
+                self._count_plt(sec_readelf)
+
             section = ELFSection(sec_readelf, remap_offset=remap_offset)
             sec_list.append((sec_readelf, section))
 
@@ -662,8 +671,6 @@ class ELF(MetaELF):
                     else: #elif section.type == 'SHT_PROGBITS':
                         self.memory.add_backer(AT.from_lva(section.vaddr, self).to_rva(), sec_readelf.data())
         
-        if isinstance(self, ELFKo):
-            self._count_plt()
 
     def __register_section_symbols(self, sec_re):
         for sym_re in sec_re.iter_symbols():

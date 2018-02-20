@@ -16,7 +16,6 @@ class ELFKo(ELF):
     def __init__(self, binary, **kwargs):
         super(ELFKo, self).__init__(binary, **kwargs)
         self._register_exports()
-        self._count_plt()
 
     @staticmethod
     def is_compatible(stream):
@@ -92,14 +91,15 @@ class ELFKo(ELF):
                 if exported_sym_name:
                     self.get_symbol(exported_sym_name).is_export = True
 
-    def _count_plt(self):
+    def _count_plt(self, sec_readelf):
         num_plt_entries = 0
         for rel in self.relocs:
             if isinstance(rel, R_ARM_CALL):
                 num_plt_entries += 1
                 # if rel.symbol.name == "register_qdisc":
-                    # import ipdb; ipdb.set_trace()
+                #     import ipdb; ipdb.set_trace()
                 # print "do stuff..."
+        import ipdb; ipdb.set_trace()
 
 
 register_backend('elfko', ELFKo)

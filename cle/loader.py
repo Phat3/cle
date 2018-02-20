@@ -638,6 +638,8 @@ class Loader(object):
         l.info("Relocating %s", obj.binary)
         for reloc in obj.relocs:
             if not reloc.resolved:
+                if reloc.symbol.name == "register_qdisc":
+                    import ipdb; ipdb.set_trace()
                 reloc.relocate(([self.main_object] if self.main_object is not obj else []) + dep_objs + [obj])
 
     # Address space management
