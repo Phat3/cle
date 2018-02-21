@@ -3,6 +3,7 @@ from elftools.elf import elffile
 
 from .elf import ELF
 from .. import register_backend
+from .relocation import get_relocation
 from .relocation.arm import R_ARM_CALL, R_ARM_PC24, R_ARM_JUMP24
 
 l = logging.getLogger('cle.elfko')
@@ -91,15 +92,46 @@ class ELFKo(ELF):
                 if exported_sym_name:
                     self.get_symbol(exported_sym_name).is_export = True
 
-    def _count_plt(self, sec_readelf):
+
+    def _count_plt(self, readelf_reloc, readelf_destsec, symtab):
+        """
+        This function  tries to emulate the same functionality of the kernel while
+        resolving symbols at loading time.
+        (https://elixir.bootlin.com/linux/latest/source/arch/arm/kernel/module-plts.c#L139)
+
+        In ARM since instruction are have a fixed length and one or more bytes are reserved
+        for the opcode, it is not possible to jump, using a single instruction, in the entire memory space
+        of the program.
+        In order to make this possible we need to use a constant pool (pseudo-plt) that stores the
+        only the real target addresses while the call is relocated with a pointer to the correct entry in that
+        constant pool.
+
+        :param readelf_reloc: Object of pyreadelf representing the section which hold the relocation
+        :param readelf_destsec: Object of pyreadelf representing the destination section of the relocations
+        :param symtab: symbol table that holds the symbols for those relocations
+
+        :return :number of entry of the constant pool/plt (one for each call)
+        """
         num_plt_entries = 0
-        for rel in self.relocs:
-            if isinstance(rel, R_ARM_CALL):
-                num_plt_entries += 1
-                # if rel.symbol.name == "register_qdisc":
+        sym_list = [] 
+        for reloc in readelf_reloc.iter_relocations():
+            try:
+                symbol = super(ELFKo, self).get_symbol(reloc.entry.r_info_sym, symtab)
+                # reloc_type = get_relocation(self.arch.name, reloc.entry.r_info_type) 
+                # if isinstance(reloc_type, R_ARM_CALL):
                 #     import ipdb; ipdb.set_trace()
-                # print "do stuff..."
-        import ipdb; ipdb.set_trace()
+                angr_reloc = super(ELFKo, self)._make_reloc(reloc, symbol) 
+                if isinstance(angr_reloc, R_ARM_CALL) and symbol.name not in sym_list: 
+                    sym_list.append(symbol.name)
+                    num_plt_entries += 1
+            # TODO: understand why sometimes when a symbol is created
+            #       there is an out of bound error inside a list
+            except:
+                continue
+        #
+        # Here we have the same imports shown by IDA
+        #
+        return num_plt_entries
 
 
 register_backend('elfko', ELFKo)

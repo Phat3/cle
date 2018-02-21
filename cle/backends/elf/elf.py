@@ -645,9 +645,15 @@ class ELF(MetaELF):
 
             if isinstance(self, ELFKo) and  \
                 sec_readelf.header["sh_type"] == "SHT_REL" and \
-                sec_readelf.header["sh_flags"] & 0x4:
-                import ipdb; ipdb.set_trace()
-                self._count_plt(sec_readelf)
+                not sec_readelf.header["sh_flags"] & 0x4:
+                num_plt = self._count_plt(
+                    # Section holding ther relocation information (i. e. .rel.text)
+                    sec_readelf,
+                    # Destination section of the relocation (i. e. .text)
+                    self.reader.get_section(sec_readelf.header["sh_info"]),
+                    # Symbol table holding the information about the relocation
+                    self.reader.get_section(sec_readelf.header["sh_link"]))
+                
 
             section = ELFSection(sec_readelf, remap_offset=remap_offset)
             sec_list.append((sec_readelf, section))
