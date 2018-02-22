@@ -30,6 +30,7 @@ class ELFSection(Section):
     SHF_ALLOC = 0x2
     SHF_EXECINSTR = 0x4
     SHF_STRINGS = 0x20
+    SHT_NOBITS = 8
 
     def __init__(self, readelf_sec, remap_offset=0):
         super(ELFSection, self).__init__(

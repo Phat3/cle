@@ -639,21 +639,17 @@ class ELF(MetaELF):
                 remap_offset = new_addr - sh_addr
                 new_addr += sec_readelf.header['sh_size']    # address for next section
 
-            # if isinstance(self, ELFKo) and sec_readelf.name == ".text":
-            #     import ipdb; ipdb.set_trace()
-            #     self._count_plt()
-
             if isinstance(self, ELFKo) and  \
                 sec_readelf.header["sh_type"] == "SHT_REL" and \
                 not sec_readelf.header["sh_flags"] & 0x4:
-                num_plt = self._count_plt(
+                # If a section of this type is found we have to paarse its relocs
+                self._register_constants_pool_entries(
                     # Section holding ther relocation information (i. e. .rel.text)
                     sec_readelf,
                     # Destination section of the relocation (i. e. .text)
                     self.reader.get_section(sec_readelf.header["sh_info"]),
                     # Symbol table holding the information about the relocation
                     self.reader.get_section(sec_readelf.header["sh_link"]))
-                
 
             section = ELFSection(sec_readelf, remap_offset=remap_offset)
             sec_list.append((sec_readelf, section))
@@ -662,7 +658,13 @@ class ELF(MetaELF):
             self.sections.append(section)
             self.sections_map[section.name] = section
 
-
+        if isinstance(self, ELFKo):
+            self._add_constants_pool()
+            import ipdb; ipdb.set_trace();
+            #
+            # Here we have the same imports shown by IDA
+            #
+        
         for sec_readelf, section in sec_list:
             if isinstance(sec_readelf, elffile.SymbolTableSection):
                 self.__register_section_symbols(sec_readelf)

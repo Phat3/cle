@@ -2,12 +2,24 @@ import logging
 from elftools.elf import elffile
 
 from .elf import ELF
+from .regions import ELFSection
 from .. import register_backend
 from .relocation import get_relocation
 from .relocation.arm import R_ARM_CALL, R_ARM_PC24, R_ARM_JUMP24
 
 l = logging.getLogger('cle.elfko')
 
+class FakePltHeader:
+    def __init__(self, sh_addr, sh_size):
+        self.sh_offset = 0
+        self.sh_flags = ELFSection.SHF_EXECINSTR | ELFSection.SHF_ALLOC
+        self.sh_type =  ELFSection.SHT_NOBITS
+        self.sh_size = sh_size 
+        self.sh_addr = sh_addr
+        self.sh_entsize = 32 
+        self.sh_link = None
+        self.sh_info = None
+        self.sh_addralign = None
 
 class ELFKo(ELF):
     """
@@ -15,6 +27,7 @@ class ELFKo(ELF):
     """
 
     def __init__(self, binary, **kwargs):
+        self._registered_relocs_in_constants_pool = []
         super(ELFKo, self).__init__(binary, **kwargs)
         self._register_exports()
 
@@ -93,7 +106,7 @@ class ELFKo(ELF):
                     self.get_symbol(exported_sym_name).is_export = True
 
 
-    def _count_plt(self, readelf_reloc, readelf_destsec, symtab):
+    def _register_constants_pool_entries(self, readelf_reloc, readelf_destsec, symtab):
         """
         This function  tries to emulate the same functionality of the kernel while
         resolving symbols at loading time.
@@ -111,9 +124,9 @@ class ELFKo(ELF):
         :param symtab: symbol table that holds the symbols for those relocations
 
         :return :number of entry of the constant pool/plt (one for each call)
+
+        TODO: Add missing check implented by the kernel in the same function
         """
-        num_plt_entries = 0
-        sym_list = [] 
         for reloc in readelf_reloc.iter_relocations():
             try:
                 symbol = super(ELFKo, self).get_symbol(reloc.entry.r_info_sym, symtab)
@@ -121,17 +134,22 @@ class ELFKo(ELF):
                 # if isinstance(reloc_type, R_ARM_CALL):
                 #     import ipdb; ipdb.set_trace()
                 angr_reloc = super(ELFKo, self)._make_reloc(reloc, symbol) 
-                if isinstance(angr_reloc, R_ARM_CALL) and symbol.name not in sym_list: 
-                    sym_list.append(symbol.name)
-                    num_plt_entries += 1
+                if isinstance(angr_reloc, R_ARM_CALL) and symbol.name not in self._registered_relocs_in_constants_pool: 
+                    self._registered_relocs_in_constants_pool.append(symbol.name)
             # TODO: understand why sometimes when a symbol is created
             #       there is an out of bound error inside a list
             except:
                 continue
-        #
-        # Here we have the same imports shown by IDA
-        #
-        return num_plt_entries
+
+
+    def _add_constants_pool(self):
+        if len(self._registered_relocs_in_constants_pool):
+            fake_header = FakePltHeader(1000, len(self._registered_relocs_in_constants_pool) * (self.arch.bits / 8))
+            constants_pool = elffile.Section(fake_header, ".plt", self.memory)
+            section = ELFSection(constants_pool)
+            # Register sections first, process later - this is required by relocatable objects
+            self.sections.append(section)
+            self.sections_map[section.name] = section
 
 
 register_backend('elfko', ELFKo)
